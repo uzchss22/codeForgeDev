@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Collaborative Code IDE</title>
+    <style>
+        #editor { width: 80%; height: 500px; border: 1px solid #ddd; padding: 10px; resize: none; }
+        .cursor { position: absolute; width: 5px; height: 5px; background-color: red; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.21.2/min/vs/loader.js"></script>
+</head>
+<body>
+<h1>Collaborative Code IDE</h1>
+<label for="file-extension">Choose a file extension:</label>
+<select id="file-extension">
+    <option value="plaintext">Select file extension</option>
+    <option value="js">.js (JavaScript)</option>
+    <option value="py">.py (Python)</option>
+    <option value="java">.java (Java)</option>
+    <option value="cpp">.cpp (C++)</option>
+    <option value="c">.c (C)</option>
+</select>
+<div id="editor"></div>
+<script>
+    //
+    // monaco editor function
+    //
+    // load monaco editor
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.21.2/min/vs' }});
+    require(['vs/editor/editor.main'], function() {
+        // 에디터 초기화
+        let editor = monaco.editor.create(document.getElementById('editor'), {
+            value: '// Write your code here...',  // placeholder for code space
+            language: 'plaintext',  // default language is 'plaintext'
+            theme: 'vs-dark'
+        });
+
+        // Select box에서 파일 확장자가 변경되면 에디터 언어 변경
+        document.getElementById('file-extension').addEventListener('change', function(event) {
+            let selectedExtension = event.target.value;
+            let extensionToLanguageMap = {
+                'js': 'javascript',
+                'py': 'python',
+                'java': 'java',
+                'cpp': 'cpp',
+                'c': 'c'
+            };
+
+            // 선택된 확장자에 맞는 언어를 설정, 없으면 'plaintext'로 설정
+            let language = extensionToLanguageMap[selectedExtension] || 'plaintext';
+            monaco.editor.setModelLanguage(editor.getModel(), language);
+        });
+    });
+
+
+    //
+    // collaborative function
+    //
+    const editor = document.getElementById('editor');
+    const ws = new WebSocket("ws://localhost:8080/ws/text");
+
+    // WebSocket 수신 처리
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'text') {
+            editor.innerText = data.content;
+        } else if (data.type === 'cursor') {
+            updateCursor(data.id, data.position);
+        }
+    };
+
+    // 텍스트 입력 시 WebSocket으로 전송
+    editor.addEventListener('input', () => {
+        const message = {
+            type: 'text',
+            content: editor.innerText
+        };
+        ws.send(JSON.stringify(message));
+    });
+
+    // 마우스 이동 시 좌표 전송
+    editor.addEventListener('mousemove', (event) => {
+        const rect = editor.getBoundingClientRect();
+        const position = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const message = {
+            type: 'cursor',
+            id: 'user1',  // 각 사용자는 고유 id가 있어야 함.
+            position: position
+        };
+        ws.send(JSON.stringify(message));
+    });
+
+    // 마우스 커서 업데이트
+    function updateCursor(id, position) {
+        let cursor = document.getElementById(id);
+        if (!cursor) {
+            cursor = document.createElement('div');
+            cursor.id = id;
+            cursor.className = 'cursor';
+            document.body.appendChild(cursor);
+        }
+        cursor.style.left = position.x + 'px';
+        cursor.style.top = position.y + 'px';
+    }
+</script>
+</body>
+</html>
